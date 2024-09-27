@@ -33,7 +33,7 @@ data:
             POD=$(oc get pod -l app=gitlab -n gitlab --no-headers | awk '{print $1}')
             oc exec $POD -n {{ gitlab_namespace }} -- /bin/sh -c /scripts/create-root-pat.sh
             ROOT_PAT=$(oc exec $POD -n {{ gitlab_namespace }} -- /bin/sh -c "cat /tmp/root.pat"
-            oc create s
+            oc create secret generic root-user-personal-token --from-literal=token=$ROOT_PAT -n {{ $.Release.Namespace }}
 
         - name: Retrieve root token
           kubernetes.core.k8s_info:
