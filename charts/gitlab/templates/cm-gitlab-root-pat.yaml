@@ -2,7 +2,7 @@ kind: ConfigMap
 metadata:
   name:  cm-create-root-pat
   annotations:
-    argocd.argoproj.io/sync-wave: "3"
+    argocd.argoproj.io/sync-wave: "1"
 apiVersion: v1
 data:
   create-root-pat.sh: |
