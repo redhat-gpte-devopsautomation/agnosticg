@@ -50,5 +50,6 @@ spec:
       - name: create-root-pat-vol
         configMap:
           name: cm-create-root-pat
+          defaultMode: 0777
       serviceAccount: gitlab
       serviceAccountName: gitlab
