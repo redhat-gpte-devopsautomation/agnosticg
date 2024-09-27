@@ -50,12 +50,5 @@ spec:
       - name: create-root-pat-vol
         configMap:
           name: cm-create-root-pat
-      restartPolicy: Never
-      serviceAccount: gitlab
-      volumes:
-      - name: init-gitlab-vol
-        configMap:
-          name: cm-init-gitlab
-          
       serviceAccount: gitlab
       serviceAccountName: gitlab
