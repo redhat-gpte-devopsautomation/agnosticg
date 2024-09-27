@@ -90,7 +90,7 @@ data:
             body_format: form-urlencoded
             body:
               import_sources: "git,github,gitea"
-              version_check_enabled: false
+              version_check_enabled: "false"
             headers:
               PRIVATE-TOKEN: '{{ "{{" }} root_token {{ "}}" }}'
             validate_certs: false
