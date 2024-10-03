@@ -73,8 +73,8 @@ data:
             body_format: form-urlencoded
             body:
               admin: false
-              email: user{{ "{{" }} item {{ "}}" }}@opentlc.com
-              public_email: user{{ "{{" }} item {{ "}}" }}@opentlc.com
+              email: user{{ "{{" }} item {{ "}}" }}@demo.redhat.com
+              public_email: user{{ "{{" }} item {{ "}}" }}@demo.redhat.com
               skip_confirmation: true
               username: user{{ "{{" }} item {{ "}}" }}
               password: {{ $.Values.gitlab.users.password }}
