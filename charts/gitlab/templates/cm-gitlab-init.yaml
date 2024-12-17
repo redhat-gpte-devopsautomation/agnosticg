@@ -90,6 +90,28 @@ data:
           until: r_user.status == 201
           loop: '{{ "{{" }} range(1, {{ $.Values.gitlab.users.count }} + 1) | list {{ "}}" }}'
 
+        - name: Create PE user
+          ansible.builtin.uri:
+            url: https://{{ $.Values.gitlab.host }}/api/v4/users
+            method: POST
+            body_format: form-urlencoded
+            body:
+              admin: false
+              email: pe@demo.redhat.com
+              public_email: pe@demo.redhat.com
+              skip_confirmation: true
+              username: pe
+              password: {{ $.Values.gitlab.users.password }}
+              name: Platform Engineer GitLab
+            headers:
+              PRIVATE-TOKEN: '{{ "{{" }} root_token {{ "}}" }}'
+            validate_certs: false
+            status_code: 201
+          register: r_user
+          retries: 100
+          delay: 5
+          until: r_user.status == 201
+
         - name: List users
           ansible.builtin.uri:
             url: https://{{ $.Values.gitlab.host }}/api/v4/users?per_page=100
@@ -145,7 +167,7 @@ data:
 {{- end }}
 
         - name: Add user to group
-          when: item.username.startswith('user')
+          when: item.username.startswith('user') or item.username == 'pe'
           ansible.builtin.uri:
             url: https://{{ $.Values.gitlab.host }}/api/v4/groups/{{ "{{" }} r_group.json.id {{ "}}" }}/members
             method: POST
