@@ -110,6 +110,7 @@ data:
             body:
               name: {{ $item.name }}
               path: {{ $item.name }}
+              description: {{ default "" $item.description }}
               visibility: public
             headers:
               PRIVATE-TOKEN: '{{ "{{" }} root_token {{ "}}" }}'
