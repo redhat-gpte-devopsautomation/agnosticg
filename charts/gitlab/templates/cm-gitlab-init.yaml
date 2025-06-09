@@ -79,7 +79,7 @@ data:
               skip_confirmation: true
               username: {{ $.Values.gitlab.users.base }}{{ "{{" }} item {{ "}}" }}
               password: {{ $.Values.gitlab.users.password }}
-              name: {{ "{{ '" }}{{ $.Values.gitlab.users.base }}{{ "' | capitalize }}" }}{{ "{{" }} item {{ "}}" }} GitLab
+              name: '{{ "{{ '" }}{{ $.Values.gitlab.users.base }}'{{ "' | capitalize }}" }}{{ "{{" }} item {{ "}}" }} GitLab
             headers:
               PRIVATE-TOKEN: '{{ "{{" }} root_token {{ "}}" }}'
             validate_certs: false
