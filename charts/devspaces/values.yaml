@@ -1,7 +1,3 @@
-oauth:
-  clientId: ''
-  clientSecret: ''
-  provider: ''
 devSpaces:
   operator:
     catalogSource:
