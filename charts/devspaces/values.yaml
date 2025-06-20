@@ -6,6 +6,6 @@ devSpaces:
       image: registry.redhat.io/redhat/redhat-operator-index
       tag: v4.14
       namespace: openshift-marketplace
-    namespace: openshift-operators
+    namespace: openshift-devspaces
     channel: stable
     startingCSV: ""
