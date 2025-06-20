@@ -8,4 +8,4 @@ devSpaces:
       namespace: openshift-marketplace
     namespace: openshift-devspaces
     channel: stable
-    startingCSV: ""
+    startingCSV: devspacesoperator.v3.21.0
