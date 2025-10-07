@@ -62,6 +62,7 @@ data:
               import_sources: "git,github,gitea"
               version_check_enabled: "false"
               allow_local_requests_from_web_hooks_and_services: "true"
+              auto_devops_enabled: "false"
             headers:
               PRIVATE-TOKEN: '{{ "{{" }} root_token {{ "}}" }}'
             validate_certs: false
@@ -74,12 +75,12 @@ data:
             body_format: form-urlencoded
             body:
               admin: false
-              email: user{{ "{{" }} item {{ "}}" }}@demo.redhat.com
-              public_email: user{{ "{{" }} item {{ "}}" }}@demo.redhat.com
+              email: {{ $.Values.gitlab.users.base }}{{ "{{" }} item {{ "}}" }}@demo.redhat.com
+              public_email: {{ $.Values.gitlab.users.base }}{{ "{{" }} item {{ "}}" }}@demo.redhat.com
               skip_confirmation: true
-              username: user{{ "{{" }} item {{ "}}" }}
+              username: {{ $.Values.gitlab.users.base }}{{ "{{" }} item {{ "}}" }}
               password: {{ $.Values.gitlab.users.password }}
-              name: User{{ "{{" }} item {{ "}}" }} GitLab
+              name: "{{ "{{ '" }}{{ $.Values.gitlab.users.base }}{{ "' | capitalize }}" }}{{ "{{" }} item {{ "}}" }} GitLab"
             headers:
               PRIVATE-TOKEN: '{{ "{{" }} root_token {{ "}}" }}'
             validate_certs: false
@@ -145,7 +146,7 @@ data:
 {{- end }}
 
         - name: Add user to group
-          when: item.username.startswith('user')
+          when: item.username.startswith('{{ $.Values.gitlab.users.base }}')
           ansible.builtin.uri:
             url: https://{{ $.Values.gitlab.host }}/api/v4/groups/{{ "{{" }} r_group.json.id {{ "}}" }}/members
             method: POST
