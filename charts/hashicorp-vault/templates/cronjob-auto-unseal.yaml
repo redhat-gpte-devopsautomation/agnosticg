@@ -1,0 +1,81 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: vault-auto-unseal
+  namespace: vault
+  labels:
+    rht-gitops.com/openshift-gitops: vault
+spec:
+  schedule: "*/1 * * * *" 
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: vault
+          restartPolicy: Never
+          containers:
+          - name: unsealer
+            image: registry.redhat.io/openshift4/ose-cli:v4.7
+            command:
+            - /bin/bash
+            - -c
+            - |
+              echo "=== Vault Auto-Unseal Check at $(date) ==="
+              
+              # Check if vault-0 pod exists
+              if ! oc get pod vault-0 -n vault &>/dev/null; then
+                echo "Vault pod vault-0 not found, skipping..."
+                exit 0
+              fi
+              
+              # Check vault status - capture exit code properly
+              echo "Checking Vault status..."
+              set +e  # Disable exit on error temporarily
+              oc exec vault-0 -n vault -- vault status -tls-skip-verify
+              STATUS=$?
+              set -e  # Re-enable exit on error
+              
+              echo "Status code: $STATUS"
+              
+              if [ $STATUS -eq 0 ]; then
+                echo "✓ Vault is already unsealed and healthy"
+                exit 0
+              elif [ $STATUS -eq 2 ]; then
+                echo "⚠ Vault is sealed, attempting to unseal..."
+                
+                # Check if unseal script exists
+                set +e
+                oc exec vault-0 -n vault -- test -f /vault/data/unseal.sh
+                SCRIPT_EXISTS=$?
+                set -e
+                
+                if [ $SCRIPT_EXISTS -ne 0 ]; then
+                  echo "✗ Unseal script not found at /vault/data/unseal.sh"
+                  echo "  This is expected on first initialization"
+                  exit 0
+                fi
+                
+                # Run unseal script
+                echo "Running unseal script..."
+                oc exec vault-0 -n vault -- /bin/sh /vault/data/unseal.sh
+                
+                # Verify unseal succeeded
+                set +e
+                oc exec vault-0 -n vault -- vault status -tls-skip-verify
+                FINAL_STATUS=$?
+                set -e
+                
+                if [ $FINAL_STATUS -eq 0 ]; then
+                  echo "✓ Successfully unsealed Vault"
+                  exit 0
+                else
+                  echo "✗ Vault unseal failed (exit code: $FINAL_STATUS)"
+                  exit 1
+                fi
+              else
+                echo "✗ Vault status check failed with unexpected code: $STATUS"
+                exit 1
+              fi
