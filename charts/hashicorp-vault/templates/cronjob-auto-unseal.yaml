@@ -2,9 +2,6 @@ apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: vault-auto-unseal
-  namespace: vault
-  labels:
-    rht-gitops.com/openshift-gitops: vault
 spec:
   schedule: "*/1 * * * *" 
   concurrencyPolicy: Forbid
