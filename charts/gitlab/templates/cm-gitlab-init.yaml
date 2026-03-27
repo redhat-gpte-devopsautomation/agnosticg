@@ -24,8 +24,8 @@ data:
             method: GET
             validate_certs: false
           register: r_liveness
-          retries: 60
-          delay: 10
+          retries: 40
+          delay: 15
           until: r_liveness.status == 200
 
         - name: Generate root user personal token
@@ -35,6 +35,10 @@ data:
             ROOT_PAT=$(oc exec $POD -n {{ $.Release.Namespace }} -- /bin/sh -c "cat /tmp/root.pat")
             oc delete secret root-user-personal-token -n {{ $.Release.Namespace }} --ignore-not-found
             oc create secret generic root-user-personal-token --from-literal=token=$ROOT_PAT -n {{ $.Release.Namespace }}
+          register: r_generate_token
+          retries: 40
+          delay: 15
+          until: r_generate_token.rc == 0
 
         - name: Retrieve root token
           kubernetes.core.k8s_info:
@@ -43,7 +47,11 @@ data:
             name: root-user-personal-token
             namespace: '{{ "{{" }} gitlab_namespace {{ "}}" }}'
           register: r_root_token
-          failed_when: r_root_token.resources[0].data.token | length == 0
+          retries: 40
+          delay: 15
+          until:
+            - r_root_token.resources | length > 0
+            - r_root_token.resources[0].data.token | length > 0
 
         - name:
           debug:
@@ -67,6 +75,10 @@ data:
               PRIVATE-TOKEN: '{{ "{{" }} root_token {{ "}}" }}'
             validate_certs: false
             status_code: 200
+          register: r_app_settings
+          retries: 40
+          delay: 15
+          until: r_app_settings.status == 200
 
         - name: Create users
           ansible.builtin.uri:
@@ -86,8 +98,8 @@ data:
             validate_certs: false
             status_code: 201
           register: r_user
-          retries: 100
-          delay: 5
+          retries: 40
+          delay: 15
           until: r_user.status == 201
           loop: '{{ "{{" }} range(1, {{ $.Values.gitlab.users.count }} + 1) | list {{ "}}" }}'
 
@@ -100,6 +112,9 @@ data:
             validate_certs: false
             status_code: 200
           register: r_users
+          retries: 40
+          delay: 15
+          until: r_users.status == 200
 
 {{- range $item := .Values.gitlab.groups }}
 
@@ -117,8 +132,8 @@ data:
             validate_certs: false
             status_code: 201
           register: r_group
-          retries: 100
-          delay: 5
+          retries: 40
+          delay: 15
           until: r_group.status == 201
 
         - name: Import repository to group
@@ -135,8 +150,8 @@ data:
               PRIVATE-TOKEN: '{{ "{{" }} root_token {{ "}}" }}'
             validate_certs: false
             status_code: 201
-          retries: 100
-          delay: 5
+          retries: 40
+          delay: 15
           register: r_import
           until: r_import.status == 201
           loop: {{ ($item.repo | default (list)) | toYaml | nindent 12 }}
@@ -156,8 +171,8 @@ data:
             validate_certs: false
             status_code: 201
           register: r_group_user
-          retries: 100
-          delay: 5
+          retries: 40
+          delay: 15
           until: r_group_user.status == 201
           loop: '{{ "{{" }} r_users.json {{ "}}" }}'
 {{- end }}
