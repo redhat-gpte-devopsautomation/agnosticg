@@ -140,7 +140,7 @@ data:
           register: r_import
           until: r_import.status == 201
           loop:
-{{- range $item1 := $item.repo }}
+{{- range $item1 :=  ($item.repo | default (list)) }}
             - name: {{ $item1.name }}
               url: {{ $item1.url }}
 {{- end }}
