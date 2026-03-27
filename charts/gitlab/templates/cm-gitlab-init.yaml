@@ -140,6 +140,7 @@ data:
           register: r_import
           until: r_import.status == 201
           loop: {{ ($item.repo | default (list)) | toYaml | nindent 12 }}
+          when: {{ ($item.repo | default (list) | len) }} > 0
 
         - name: Add user to group
           when: item.username.startswith('{{ $.Values.gitlab.users.base }}')
