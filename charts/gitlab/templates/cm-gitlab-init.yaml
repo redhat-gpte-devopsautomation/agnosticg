@@ -14,19 +14,23 @@ data:
         root_password: {{ $.Values.gitlab.rootPassword }}
         user_create: true
       tasks:
-        - name: Pause for 5 minutes waiting for GitLab
-          ansible.builtin.pause:
-            minutes: 5
-
         - name: Check GitLab Liveness
           ansible.builtin.uri:
             url: https://{{ $.Values.gitlab.host }}/api/v4/projects
             method: GET
             validate_certs: false
           register: r_liveness
-          retries: 60
-          delay: 10
+          retries: 40
+          delay: 15
           until: r_liveness.status == 200
+
+        - name: Check if root token secret exists
+          kubernetes.core.k8s_info:
+            api_version: v1
+            kind: Secret
+            name: root-user-personal-token
+            namespace: '{{ "{{" }} gitlab_namespace {{ "}}" }}'
+          register: r_token_check
 
         - name: Generate root user personal token
           shell: |
@@ -35,6 +39,7 @@ data:
             ROOT_PAT=$(oc exec $POD -n {{ $.Release.Namespace }} -- /bin/sh -c "cat /tmp/root.pat")
             oc delete secret root-user-personal-token -n {{ $.Release.Namespace }} --ignore-not-found
             oc create secret generic root-user-personal-token --from-literal=token=$ROOT_PAT -n {{ $.Release.Namespace }}
+          when: r_token_check.resources | length == 0
 
         - name: Retrieve root token
           kubernetes.core.k8s_info:
@@ -43,11 +48,10 @@ data:
             name: root-user-personal-token
             namespace: '{{ "{{" }} gitlab_namespace {{ "}}" }}'
           register: r_root_token
-          failed_when: r_root_token.resources[0].data.token | length == 0
 
-        - name:
+        - name: Debug root token retrieval
           debug:
-            var: r_root_token
+            msg: "Successfully retrieved root token from secret"
 
         - name: Decode root token
           set_fact:
@@ -68,7 +72,7 @@ data:
             validate_certs: false
             status_code: 200
 
-        - name: Create users
+        - name: Create users (idempotent)
           ansible.builtin.uri:
             url: https://{{ $.Values.gitlab.host }}/api/v4/users
             method: POST
@@ -84,11 +88,9 @@ data:
             headers:
               PRIVATE-TOKEN: '{{ "{{" }} root_token {{ "}}" }}'
             validate_certs: false
-            status_code: 201
-          register: r_user
-          retries: 100
-          delay: 5
-          until: r_user.status == 201
+            status_code:
+              - 201  # Created
+              - 409  # Conflict - user already exists
           loop: '{{ "{{" }} range(1, {{ $.Values.gitlab.users.count }} + 1) | list {{ "}}" }}'
 
         - name: List users
@@ -103,7 +105,19 @@ data:
 
 {{- range $item := .Values.gitlab.groups }}
 
-        - name: Create group
+        - name: Check if group {{ $item.name }} exists
+          ansible.builtin.uri:
+            url: https://{{ $.Values.gitlab.host }}/api/v4/groups/{{ $item.name }}
+            method: GET
+            headers:
+              PRIVATE-TOKEN: '{{ "{{" }} root_token {{ "}}" }}'
+            validate_certs: false
+            status_code:
+              - 200  # Group exists
+              - 404  # Group does not exist
+          register: r_group_check
+
+        - name: Create group {{ $item.name }} (if not exists)
           ansible.builtin.uri:
             url: https://{{ $.Values.gitlab.host }}/api/v4/groups
             method: POST
@@ -116,12 +130,25 @@ data:
               PRIVATE-TOKEN: '{{ "{{" }} root_token {{ "}}" }}'
             validate_certs: false
             status_code: 201
-          register: r_group
-          retries: 100
-          delay: 5
-          until: r_group.status == 201
+          register: r_group_create
+          when: r_group_check.status == 404
 
-        - name: Import repository to group
+        - name: Set group fact for {{ $item.name }}
+          set_fact:
+            r_group: '{{ "{{" }} r_group_create if r_group_check.status == 404 else r_group_check {{ "}}" }}'
+
+        - name: List projects in group {{ $item.name }}
+          ansible.builtin.uri:
+            url: https://{{ $.Values.gitlab.host }}/api/v4/groups/{{ "{{" }} r_group.json.id {{ "}}" }}/projects?per_page=100
+            method: GET
+            headers:
+              PRIVATE-TOKEN: '{{ "{{" }} root_token {{ "}}" }}'
+            validate_certs: false
+            status_code: 200
+          register: r_group_projects
+          when: {{ ($item.repo | default (list) | len) }} > 0
+
+        - name: Import repository to group {{ $item.name }} (idempotent)
           ansible.builtin.uri:
             url: https://{{ $.Values.gitlab.host }}/api/v4/projects
             method: POST
@@ -134,15 +161,15 @@ data:
             headers:
               PRIVATE-TOKEN: '{{ "{{" }} root_token {{ "}}" }}'
             validate_certs: false
-            status_code: 201
-          retries: 100
-          delay: 5
-          register: r_import
-          until: r_import.status == 201
+            status_code:
+              - 201  # Created
+              - 400  # Bad request - might already exist
           loop: {{ ($item.repo | default (list)) | toYaml | nindent 12 }}
-          when: {{ ($item.repo | default (list) | len) }} > 0
+          when:
+            - {{ ($item.repo | default (list) | len) }} > 0
+            - item.name not in (r_group_projects.json | map(attribute='name') | list)
 
-        - name: Add user to group
+        - name: Add user to group {{ $item.name }} (idempotent)
           when: item.username.startswith('{{ $.Values.gitlab.users.base }}')
           ansible.builtin.uri:
             url: https://{{ $.Values.gitlab.host }}/api/v4/groups/{{ "{{" }} r_group.json.id {{ "}}" }}/members
@@ -154,10 +181,8 @@ data:
             headers:
               PRIVATE-TOKEN: '{{ "{{" }} root_token {{ "}}" }}'
             validate_certs: false
-            status_code: 201
-          register: r_group_user
-          retries: 100
-          delay: 5
-          until: r_group_user.status == 201
+            status_code:
+              - 201  # Created
+              - 409  # Conflict - already a member
           loop: '{{ "{{" }} r_users.json {{ "}}" }}'
 {{- end }}
