@@ -53,9 +53,9 @@ data:
             - r_root_token.resources | length > 0
             - r_root_token.resources[0].data.token | length > 0
 
-        - name:
+        - name: Debug root token retrieval
           debug:
-            var: r_root_token
+            msg: "Successfully retrieved root token from secret"
 
         - name: Decode root token
           set_fact:
@@ -80,7 +80,7 @@ data:
           delay: 15
           until: r_app_settings.status == 200
 
-        - name: Create users
+        - name: Create users (idempotent)
           ansible.builtin.uri:
             url: https://{{ $.Values.gitlab.host }}/api/v4/users
             method: POST
@@ -96,11 +96,13 @@ data:
             headers:
               PRIVATE-TOKEN: '{{ "{{" }} root_token {{ "}}" }}'
             validate_certs: false
-            status_code: 201
+            status_code:
+              - 201  # Created
+              - 409  # Conflict - user already exists
           register: r_user
           retries: 40
           delay: 15
-          until: r_user.status == 201
+          until: r_user.status in [201, 409]
           loop: '{{ "{{" }} range(1, {{ $.Values.gitlab.users.count }} + 1) | list {{ "}}" }}'
 
         - name: List users
@@ -118,7 +120,22 @@ data:
 
 {{- range $item := .Values.gitlab.groups }}
 
-        - name: Create group
+        - name: Check if group {{ $item.name }} exists
+          ansible.builtin.uri:
+            url: https://{{ $.Values.gitlab.host }}/api/v4/groups/{{ $item.name }}
+            method: GET
+            headers:
+              PRIVATE-TOKEN: '{{ "{{" }} root_token {{ "}}" }}'
+            validate_certs: false
+            status_code:
+              - 200  # Group exists
+              - 404  # Group does not exist
+          register: r_group_check
+          retries: 40
+          delay: 15
+          until: r_group_check.status in [200, 404]
+
+        - name: Create group {{ $item.name }} (if not exists)
           ansible.builtin.uri:
             url: https://{{ $.Values.gitlab.host }}/api/v4/groups
             method: POST
@@ -131,12 +148,31 @@ data:
               PRIVATE-TOKEN: '{{ "{{" }} root_token {{ "}}" }}'
             validate_certs: false
             status_code: 201
-          register: r_group
+          register: r_group_create
           retries: 40
           delay: 15
-          until: r_group.status == 201
+          until: r_group_create.status == 201
+          when: r_group_check.status == 404
 
-        - name: Import repository to group
+        - name: Set group fact for {{ $item.name }}
+          set_fact:
+            r_group: '{{ "{{" }} r_group_create if r_group_check.status == 404 else r_group_check {{ "}}" }}'
+
+        - name: List projects in group {{ $item.name }}
+          ansible.builtin.uri:
+            url: https://{{ $.Values.gitlab.host }}/api/v4/groups/{{ "{{" }} r_group.json.id {{ "}}" }}/projects?per_page=100
+            method: GET
+            headers:
+              PRIVATE-TOKEN: '{{ "{{" }} root_token {{ "}}" }}'
+            validate_certs: false
+            status_code: 200
+          register: r_group_projects
+          retries: 40
+          delay: 15
+          until: r_group_projects.status == 200
+          when: {{ ($item.repo | default (list) | len) }} > 0
+
+        - name: Import repository to group {{ $item.name }} (idempotent)
           ansible.builtin.uri:
             url: https://{{ $.Values.gitlab.host }}/api/v4/projects
             method: POST
@@ -149,15 +185,19 @@ data:
             headers:
               PRIVATE-TOKEN: '{{ "{{" }} root_token {{ "}}" }}'
             validate_certs: false
-            status_code: 201
+            status_code:
+              - 201  # Created
+              - 400  # Bad request - might already exist
+          register: r_import
           retries: 40
           delay: 15
-          register: r_import
-          until: r_import.status == 201
+          until: r_import.status in [201, 400]
           loop: {{ ($item.repo | default (list)) | toYaml | nindent 12 }}
-          when: {{ ($item.repo | default (list) | len) }} > 0
+          when:
+            - {{ ($item.repo | default (list) | len) }} > 0
+            - item.name not in (r_group_projects.json | map(attribute='name') | list)
 
-        - name: Add user to group
+        - name: Add user to group {{ $item.name }} (idempotent)
           when: item.username.startswith('{{ $.Values.gitlab.users.base }}')
           ansible.builtin.uri:
             url: https://{{ $.Values.gitlab.host }}/api/v4/groups/{{ "{{" }} r_group.json.id {{ "}}" }}/members
@@ -169,10 +209,12 @@ data:
             headers:
               PRIVATE-TOKEN: '{{ "{{" }} root_token {{ "}}" }}'
             validate_certs: false
-            status_code: 201
+            status_code:
+              - 201  # Created
+              - 409  # Conflict - already a member
           register: r_group_user
           retries: 40
           delay: 15
-          until: r_group_user.status == 201
+          until: r_group_user.status in [201, 409]
           loop: '{{ "{{" }} r_users.json {{ "}}" }}'
 {{- end }}
