@@ -45,7 +45,7 @@ data:
             api_version: v1
             kind: Secret
             name: root-user-personal-token
-            namespace: '{{ "{{" }} gitlab_namespace {{ "}}" }}'
+            namespace: {% raw %}'{{ gitlab_namespace }}'{% endraw %}
           register: r_root_token
           retries: 40
           delay: 15
@@ -59,7 +59,7 @@ data:
 
         - name: Decode root token
           set_fact:
-            root_token: '{{ "{{" }} r_root_token.resources[0].data.token | b64decode {{ "}}" }}'
+            root_token: {% raw %}'{{ r_root_token.resources[0].data.token | b64decode }}'{% endraw %}
 
         - name: Update application settings
           ansible.builtin.uri:
@@ -72,7 +72,7 @@ data:
               allow_local_requests_from_web_hooks_and_services: "true"
               auto_devops_enabled: "false"
             headers:
-              PRIVATE-TOKEN: '{{ "{{" }} root_token {{ "}}" }}'
+              PRIVATE-TOKEN: {% raw %}'{{ root_token }}'{% endraw %}
             validate_certs: false
             status_code: 200
           register: r_app_settings
@@ -87,14 +87,14 @@ data:
             body_format: form-urlencoded
             body:
               admin: false
-              email: {{ $.Values.gitlab.users.base }}{{ "{{" }} item {{ "}}" }}@demo.redhat.com
-              public_email: {{ $.Values.gitlab.users.base }}{{ "{{" }} item {{ "}}" }}@demo.redhat.com
+              email: {{ $.Values.gitlab.users.base }}{% raw %}{{ item }}{% endraw %}@demo.redhat.com
+              public_email: {{ $.Values.gitlab.users.base }}{% raw %}{{ item }}{% endraw %}@demo.redhat.com
               skip_confirmation: true
-              username: {{ $.Values.gitlab.users.base }}{{ "{{" }} item {{ "}}" }}
+              username: {{ $.Values.gitlab.users.base }}{% raw %}{{ item }}{% endraw %}
               password: {{ $.Values.gitlab.users.password }}
-              name: "{{ "{{ '" }}{{ $.Values.gitlab.users.base }}{{ "' | capitalize }}" }}{{ "{{" }} item {{ "}}" }} GitLab"
+              name: {% raw %}"{{ '{% endraw %}{{ $.Values.gitlab.users.base }}{% raw %}' | capitalize }}{{ item }} GitLab"{% endraw %}
             headers:
-              PRIVATE-TOKEN: '{{ "{{" }} root_token {{ "}}" }}'
+              PRIVATE-TOKEN: {% raw %}'{{ root_token }}'{% endraw %}
             validate_certs: false
             status_code:
               - 201  # Created
@@ -103,14 +103,14 @@ data:
           retries: 40
           delay: 15
           until: r_user.status in [201, 409]
-          loop: '{{ "{{" }} range(1, {{ $.Values.gitlab.users.count }} + 1) | list {{ "}}" }}'
+          loop: {% raw %}'{{ range(1, {% endraw %}{{ $.Values.gitlab.users.count }}{% raw %} + 1) | list }}'{% endraw %}
 
         - name: List users
           ansible.builtin.uri:
             url: https://{{ $.Values.gitlab.host }}/api/v4/users?per_page=100
             method: GET
             headers:
-              PRIVATE-TOKEN: '{{ "{{" }} root_token {{ "}}" }}'
+              PRIVATE-TOKEN: {% raw %}'{{ root_token }}'{% endraw %}
             validate_certs: false
             status_code: 200
           register: r_users
@@ -125,7 +125,7 @@ data:
             url: https://{{ $.Values.gitlab.host }}/api/v4/groups/{{ $item.name }}
             method: GET
             headers:
-              PRIVATE-TOKEN: '{{ "{{" }} root_token {{ "}}" }}'
+              PRIVATE-TOKEN: {% raw %}'{{ root_token }}'{% endraw %}
             validate_certs: false
             status_code:
               - 200  # Group exists
@@ -145,7 +145,7 @@ data:
               path: {{ $item.name }}
               visibility: public
             headers:
-              PRIVATE-TOKEN: '{{ "{{" }} root_token {{ "}}" }}'
+              PRIVATE-TOKEN: {% raw %}'{{ root_token }}'{% endraw %}
             validate_certs: false
             status_code: 201
           register: r_group_create
@@ -156,14 +156,14 @@ data:
 
         - name: Set group fact for {{ $item.name }}
           set_fact:
-            r_group: '{{ "{{" }} r_group_create if r_group_check.status == 404 else r_group_check {{ "}}" }}'
+            r_group: {% raw %}'{{ r_group_create if r_group_check.status == 404 else r_group_check }}'{% endraw %}
 
         - name: List projects in group {{ $item.name }}
           ansible.builtin.uri:
-            url: https://{{ $.Values.gitlab.host }}/api/v4/groups/{{ "{{" }} r_group.json.id {{ "}}" }}/projects?per_page=100
+            url: https://{{ $.Values.gitlab.host }}/api/v4/groups/{% raw %}{{ r_group.json.id }}{% endraw %}/projects?per_page=100
             method: GET
             headers:
-              PRIVATE-TOKEN: '{{ "{{" }} root_token {{ "}}" }}'
+              PRIVATE-TOKEN: {% raw %}'{{ root_token }}'{% endraw %}
             validate_certs: false
             status_code: 200
           register: r_group_projects
@@ -178,12 +178,14 @@ data:
             method: POST
             body_format: form-urlencoded
             body:
-              name: '{{ "{{" }} item.name {{ "}}" }}'
-              import_url: '{{ "{{" }} item.url {{ "}}" }}'
+              name: {% raw %}'{{ item.name }}'{% endraw %}
+
+              import_url: {% raw %}'{{ item.url }}'{% endraw %}
+
               visibility: public
-              namespace_id: '{{ "{{" }} r_group.json.id {{ "}}" }}'
+              namespace_id: {% raw %}'{{ r_group.json.id }}'{% endraw %}
             headers:
-              PRIVATE-TOKEN: '{{ "{{" }} root_token {{ "}}" }}'
+              PRIVATE-TOKEN: {% raw %}'{{ root_token }}'{% endraw %}
             validate_certs: false
             status_code:
               - 201  # Created
@@ -200,14 +202,14 @@ data:
         - name: Add user to group {{ $item.name }} (idempotent)
           when: item.username.startswith('{{ $.Values.gitlab.users.base }}')
           ansible.builtin.uri:
-            url: https://{{ $.Values.gitlab.host }}/api/v4/groups/{{ "{{" }} r_group.json.id {{ "}}" }}/members
+            url: https://{{ $.Values.gitlab.host }}/api/v4/groups/{% raw %}{{ r_group.json.id }}{% endraw %}/members
             method: POST
             body_format: form-urlencoded
             body:
-              user_id: '{{ "{{" }} item.id {{ "}}" }}'
+              user_id: {% raw %}'{{ item.id }}'{% endraw %}
               access_level: 50
             headers:
-              PRIVATE-TOKEN: '{{ "{{" }} root_token {{ "}}" }}'
+              PRIVATE-TOKEN: {% raw %}'{{ root_token }}'{% endraw %}
             validate_certs: false
             status_code:
               - 201  # Created
@@ -216,5 +218,5 @@ data:
           retries: 40
           delay: 15
           until: r_group_user.status in [201, 409]
-          loop: '{{ "{{" }} r_users.json {{ "}}" }}'
+          loop: {% raw %}'{{ r_users.json }}'{% endraw %}
 {{- end }}
