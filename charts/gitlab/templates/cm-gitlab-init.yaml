@@ -16,7 +16,7 @@ data:
       tasks:
         - name: Check GitLab Liveness
           ansible.builtin.uri:
-            url: http://gitlab.gitlab.svc/api/v4/projects
+            url: http://gitlab.{{ $.Release.Namespace }}.svc/api/v4/projects
             method: GET
             validate_certs: false
           register: r_liveness
@@ -29,7 +29,7 @@ data:
             api_version: v1
             kind: Secret
             name: root-user-personal-token
-            namespace: '{{ "{{" }} gitlab_namespace {{ "}}" }}'
+            namespace: {{ $.Release.Namespace }}
           register: r_token_check
 
         - name: Generate root user personal token
@@ -46,7 +46,7 @@ data:
             api_version: v1
             kind: Secret
             name: root-user-personal-token
-            namespace: '{{ "{{" }} gitlab_namespace {{ "}}" }}'
+            namespace: {{ $.Release.Namespace }}
           register: r_root_token
 
         - name: Debug root token retrieval
@@ -59,7 +59,7 @@ data:
 
         - name: Update application settings
           ansible.builtin.uri:
-            url: http://gitlab.gitlab.svc/api/v4/application/settings
+            url: http://gitlab.{{ $.Release.Namespace }}.svc/api/v4/application/settings
             method: PUT
             body_format: form-urlencoded
             body:
@@ -74,7 +74,7 @@ data:
 
         - name: Create users (idempotent)
           ansible.builtin.uri:
-            url: http://gitlab.gitlab.svc/api/v4/users
+            url: http://gitlab.{{ $.Release.Namespace }}.svc/api/v4/users
             method: POST
             body_format: form-urlencoded
             body:
@@ -95,7 +95,7 @@ data:
 
         - name: List users
           ansible.builtin.uri:
-            url: http://gitlab.gitlab.svc/api/v4/users?per_page=100
+            url: http://gitlab.{{ $.Release.Namespace }}.svc/api/v4/users?per_page=100
             method: GET
             headers:
               PRIVATE-TOKEN: '{{ "{{" }} root_token {{ "}}" }}'
@@ -107,7 +107,7 @@ data:
 
         - name: Check if group {{ $item.name }} exists
           ansible.builtin.uri:
-            url: http://gitlab.gitlab.svc/api/v4/groups/{{ $item.name }}
+            url: http://gitlab.{{ $.Release.Namespace }}.svc/api/v4/groups/{{ $item.name }}
             method: GET
             headers:
               PRIVATE-TOKEN: '{{ "{{" }} root_token {{ "}}" }}'
@@ -119,7 +119,7 @@ data:
 
         - name: Create group {{ $item.name }} (if not exists)
           ansible.builtin.uri:
-            url: http://gitlab.gitlab.svc/api/v4/groups
+            url: http://gitlab.{{ $.Release.Namespace }}.svc/api/v4/groups
             method: POST
             body_format: form-urlencoded
             body:
@@ -139,7 +139,7 @@ data:
 
         - name: List projects in group {{ $item.name }}
           ansible.builtin.uri:
-            url: http://gitlab.gitlab.svc/api/v4/groups/{{ "{{" }} r_group.json.id {{ "}}" }}/projects?per_page=100
+            url: http://gitlab.{{ $.Release.Namespace }}.svc/api/v4/groups/{{ "{{" }} r_group.json.id {{ "}}" }}/projects?per_page=100
             method: GET
             headers:
               PRIVATE-TOKEN: '{{ "{{" }} root_token {{ "}}" }}'
@@ -150,7 +150,7 @@ data:
 
         - name: Import repository to group {{ $item.name }} (idempotent)
           ansible.builtin.uri:
-            url: http://gitlab.gitlab.svc/api/v4/projects
+            url: http://gitlab.{{ $.Release.Namespace }}.svc/api/v4/projects
             method: POST
             body_format: form-urlencoded
             body:
@@ -172,7 +172,7 @@ data:
         - name: Add user to group {{ $item.name }} (idempotent)
           when: item.username.startswith('{{ $.Values.gitlab.users.base }}')
           ansible.builtin.uri:
-            url: http://gitlab.gitlab.svc/api/v4/groups/{{ "{{" }} r_group.json.id {{ "}}" }}/members
+            url: http://gitlab.{{ $.Release.Namespace }}.svc/api/v4/groups/{{ "{{" }} r_group.json.id {{ "}}" }}/members
             method: POST
             body_format: form-urlencoded
             body:
