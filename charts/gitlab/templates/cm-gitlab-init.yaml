@@ -67,6 +67,9 @@ data:
               version_check_enabled: "false"
               allow_local_requests_from_web_hooks_and_services: "true"
               auto_devops_enabled: "false"
+              throttle_unauthenticated_enabled: "false"
+              throttle_authenticated_api_enabled: "false"
+              throttle_authenticated_web_enabled: "false"
             headers:
               PRIVATE-TOKEN: '{{ "{{" }} root_token {{ "}}" }}'
             validate_certs: false
